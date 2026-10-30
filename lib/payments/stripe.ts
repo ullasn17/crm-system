@@ -56,17 +56,7 @@ export async function createStripeCheckoutSession(
   const stripe = getStripeClient();
 
   if (!stripe) {
-    console.warn('[Stripe]: STRIPE_SECRET_KEY not set. Using simulated POS checkout session.');
-    const mockSessionId = `cs_mock_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const mockReturnUrl = successUrl.replace('{CHECKOUT_SESSION_ID}', mockSessionId);
-    return {
-      sessionId: mockSessionId,
-      url: mockReturnUrl,
-      amount: amount,
-      currency: 'inr',
-      receipt,
-      isMock: true,
-    };
+    throw new Error('STRIPE_SECRET_KEY is not set in environment variables. Please add it to your Vercel project settings and redeploy.');
   }
 
   const lineItems =
@@ -107,7 +97,7 @@ export async function createStripeCheckoutSession(
         customerPhone: customerPhone || '',
         storeId: storeId || '',
         system: 'StorePulse POS',
-        paymentMethod: params.paymentMethod || 'Card',
+        paymentMethod: params.paymentMethod || 'Online',
         upiKey: params.upiKey || '',
       },
       success_url: successUrl,
@@ -127,17 +117,8 @@ export async function createStripeCheckoutSession(
       isMock: false,
     };
   } catch (error: any) {
-    console.warn('[Stripe Session Creation Warning]: External Stripe API error, falling back to simulated checkout session:', error?.message || error);
-    const mockSessionId = `cs_mock_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const mockReturnUrl = successUrl.replace('{CHECKOUT_SESSION_ID}', mockSessionId);
-    return {
-      sessionId: mockSessionId,
-      url: mockReturnUrl,
-      amount: amount,
-      currency: 'inr',
-      receipt,
-      isMock: true,
-    };
+    console.error('[Stripe Session Creation Error]:', error);
+    throw new Error(`Stripe gateway error: ${error.message || error}`);
   }
 }
 

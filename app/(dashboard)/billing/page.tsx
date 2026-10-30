@@ -343,16 +343,23 @@ export default function BillingPOSPage() {
       setStripeRedirecting(true);
       try {
         savePendingSaleToSessionStorage('Online');
+        const origin = window.location.origin;
         const res = await fetch('/api/payments/stripe/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             amount: grandTotal,
-            currency: 'inr',
-            description: `StorePulse POS: ${cart.length} item(s) - ${selectedCustomer?.name || 'Walk-in'}`,
+            returnUrl: `${origin}/billing?stripe_status=success&session_id={CHECKOUT_SESSION_ID}&method=Online`,
             customerEmail: selectedCustomer?.email || 'counter@storepulse.local',
             customerName: selectedCustomer?.name || 'Walk-in Customer',
-            returnPath: '/billing?method=Online',
+            customerPhone: selectedCustomer?.phone || '',
+            storeId: activeStoreId || user?.storeId,
+            items: cart.map((i) => ({
+              name: i.name,
+              quantity: i.quantity,
+              unitPrice: i.unitPrice,
+            })),
+            paymentMethod: 'Online',
           }),
         });
         const json = await res.json();
@@ -364,8 +371,8 @@ export default function BillingPOSPage() {
           setError(json.error || 'Failed to initialize Stripe online gateway');
           setStripeRedirecting(false);
         }
-      } catch {
-        setError('Network error initiating online payment session');
+      } catch (err: any) {
+        setError(err?.message || 'Network error initiating online payment session');
         setStripeRedirecting(false);
       }
     }

@@ -33,9 +33,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = SessionRequestSchema.parse(body);
 
-    const origin = req.nextUrl.origin || 'http://localhost:3000';
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+    const proto = req.headers.get('x-forwarded-proto') || 'https';
+    const origin =
+      req.headers.get('origin') ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.AUTH_URL ||
+      (host ? `${proto}://${host}` : req.nextUrl.origin);
     const receipt = data.receipt || `RCPT-${Date.now().toString().slice(-6)}`;
-    const method = data.paymentMethod || 'Card';
+    const method = data.paymentMethod || 'Online';
     const successUrl =
       data.returnUrl ||
       `${origin}/billing?stripe_status=success&session_id={CHECKOUT_SESSION_ID}&receipt=${receipt}&method=${method}`;
