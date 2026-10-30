@@ -89,7 +89,10 @@ export async function createStripeCheckoutSession(
     const session = await stripe.checkout.sessions.create({
       line_items: lineItems,
       mode: 'payment',
-      customer_email: customerEmail && customerEmail.includes('@') ? customerEmail : undefined,
+      customer_email:
+        customerEmail && customerEmail.includes('@') && !customerEmail.endsWith('.local')
+          ? customerEmail
+          : undefined,
       client_reference_id: receipt,
       metadata: {
         receipt,
