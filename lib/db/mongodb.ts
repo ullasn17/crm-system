@@ -1,13 +1,15 @@
 import mongoose from 'mongoose';
 import dns from 'dns';
 
-// Fix Windows DNS resolver issues with MongoDB Atlas SRV records
-try {
-  if (typeof dns.setServers === 'function') {
-    dns.setServers(['8.8.8.8', '1.1.1.1']);
+// Fix Windows DNS resolver issues with MongoDB Atlas SRV records (Windows local dev only)
+if (process.platform === 'win32') {
+  try {
+    if (typeof dns.setServers === 'function') {
+      dns.setServers(['8.8.8.8', '1.1.1.1']);
+    }
+  } catch {
+    // Ignore if restricted
   }
-} catch {
-  // Ignore if restricted
 }
 
 declare global {
@@ -17,17 +19,18 @@ declare global {
     promise: Promise<typeof mongoose> | null;
     memoryServerInstance?: any;
     isBootstrapping?: boolean;
+    hasBootstrapped?: boolean;
   } | undefined;
 }
 
 let cached = global.mongooseConnection;
 
 if (!cached) {
-  cached = global.mongooseConnection = { conn: null, promise: null };
+  cached = global.mongooseConnection = { conn: null, promise: null, hasBootstrapped: false };
 }
 
 async function ensureBootstrap() {
-  if (cached?.isBootstrapping) return;
+  if (cached?.hasBootstrapped || cached?.isBootstrapping) return;
   try {
     cached!.isBootstrapping = true;
     const { User } = await import('@/models/User');
@@ -38,6 +41,7 @@ async function ensureBootstrap() {
       await runSeed(true);
       console.log('[MongoDB] Automated bootstrap seed completed successfully.');
     }
+    cached!.hasBootstrapped = true;
   } catch (err) {
     console.error('[MongoDB] Automated bootstrap notice:', err);
   } finally {
@@ -47,6 +51,10 @@ async function ensureBootstrap() {
 
 async function resolveSrvUri(srvUri: string): Promise<string> {
   if (!srvUri.startsWith('mongodb+srv://')) return srvUri;
+  // On Linux/Vercel serverless, standard driver resolves SRV without custom DNS queries
+  if (process.platform !== 'win32') {
+    return srvUri;
+  }
   try {
     const dns = await import('node:dns');
     try {
@@ -86,7 +94,9 @@ async function resolveSrvUri(srvUri: string): Promise<string> {
 
 export async function connectDB(): Promise<typeof mongoose> {
   if (cached!.conn) {
-    await ensureBootstrap();
+    if (!cached?.hasBootstrapped) {
+      await ensureBootstrap();
+    }
     return cached!.conn;
   }
 
