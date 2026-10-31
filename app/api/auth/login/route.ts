@@ -12,12 +12,13 @@ import { z } from 'zod';
 const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  rememberMe: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, password } = LoginSchema.parse(body);
+    const { email, password, rememberMe } = LoginSchema.parse(body);
     const normalizedEmail = email.trim().toLowerCase();
 
     await connectDB();
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
     };
 
     const token = signToken(sessionUser);
-    await setSessionCookie(token);
+    await setSessionCookie(token, !!rememberMe);
 
     // Update lastLogin
     user.lastLogin = new Date();

@@ -40,10 +40,11 @@ export async function POST(req: NextRequest) {
         details: { resetTokenCreated: true },
       });
 
-      // In production, an email would be dispatched. For demonstrability and testing, return the token in dev mode or response
       return successResponse({
-        message: 'If the email exists in our system, password reset instructions have been generated.',
-        demoResetToken: process.env.NODE_ENV !== 'production' ? resetToken : undefined,
+        message: 'Password recovery token generated successfully.',
+        resetToken,
+        resetUrl: `/reset-password?token=${resetToken}`,
+        demoResetToken: resetToken,
       });
     }
 

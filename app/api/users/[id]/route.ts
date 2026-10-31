@@ -114,6 +114,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const session = await requirePermission('users.deactivate', req);
     const { id } = await params;
+    const url = new URL(req.url);
+    const permanent = url.searchParams.get('permanent') === 'true';
 
     await connectDB();
     const targetUser = await User.findById(id);
@@ -122,16 +124,37 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     if (session.role === 'Store Manager' && targetUser.storeId?.toString() !== session.storeId) {
-      throw new AuthError('Access denied. You can only deactivate users in your store.', 403);
+      throw new AuthError('Access denied. You can only manage users in your store.', 403);
     }
 
     if (targetUser.role === 'Admin') {
       const activeAdminCount = await User.countDocuments({ role: 'Admin', isActive: true, _id: { $ne: targetUser._id } });
       if (activeAdminCount === 0) {
-        return errorResponse(new Error('Security violation: Cannot deactivate the last remaining active Administrator.'));
+        return errorResponse(new Error('Security violation: Cannot delete or deactivate the last remaining active Administrator.'));
       }
     }
 
+    // Permanent Hard Delete (Only Admin allowed)
+    if (permanent && session.role === 'Admin') {
+      if (targetUser._id.toString() === session.userId) {
+        return errorResponse(new Error('Security restriction: You cannot delete your own active administrator account.'));
+      }
+
+      await User.findByIdAndDelete(id);
+
+      await logAuditEvent({
+        action: 'USER_DELETED',
+        module: 'Users',
+        performedBy: session.userId,
+        performedByName: session.name,
+        performedByEmail: session.email,
+        details: { deletedUserId: targetUser._id, name: targetUser.name, email: targetUser.email },
+      });
+
+      return successResponse({ message: `Employee account "${targetUser.name}" has been permanently deleted.` });
+    }
+
+    // Soft Deactivate
     targetUser.isActive = false;
     await targetUser.save();
 

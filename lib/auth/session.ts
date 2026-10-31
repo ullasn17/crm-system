@@ -31,7 +31,7 @@ export function signToken(user: SessionUser): string {
 
 export function verifyToken(token: string): SessionUser | null {
   try {
-    const decoded = jwt.verify(token, AUTH_SECRET, { ignoreExpiration: true, clockTimestamp: 0 }) as any;
+    const decoded = jwt.verify(token, AUTH_SECRET) as any;
     return {
       userId: decoded.sub,
       name: decoded.name,
@@ -54,15 +54,18 @@ export async function getSession(): Promise<SessionUser | null> {
   return verifyToken(token);
 }
 
-export async function setSessionCookie(token: string): Promise<void> {
+export async function setSessionCookie(token: string, rememberMe = false): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(AUTH_COOKIE_NAME, token, {
+  const options: any = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 7 * 24 * 60 * 60, // 7 days
-  });
+  };
+  if (rememberMe) {
+    options.maxAge = 7 * 24 * 60 * 60; // 7 days persistent
+  }
+  cookieStore.set(AUTH_COOKIE_NAME, token, options);
 }
 
 export async function clearSessionCookie(): Promise<void> {
@@ -74,6 +77,7 @@ export async function clearSessionCookie(): Promise<void> {
       expires: new Date(0),
       httpOnly: true,
       sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
     });
   } catch {}
   cookieStore.delete(AUTH_COOKIE_NAME);

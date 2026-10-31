@@ -33,6 +33,7 @@ import {
   CreditCard,
   MessageSquare,
   Sparkles,
+  Key,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
@@ -48,10 +49,56 @@ export default function DashboardClientShell({ children }: { children: React.Rea
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [showPrinciplesModal, setShowPrinciplesModal] = useState(false);
   const [todayTotal, setTodayTotal] = useState<string>('0.00');
+
+  // Profile & Password states
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileError('');
+    setProfileSuccess('');
+
+    if (newPassword.length < 8) {
+      setProfileError('New password must be at least 8 characters long');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setProfileError('New password and confirmation do not match');
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setProfileSuccess('Password updated successfully!');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setProfileError(json.error || 'Failed to update password');
+      }
+    } catch {
+      setProfileError('Network communication error');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   // Fetch stores if user is Admin
   useEffect(() => {
@@ -406,6 +453,24 @@ export default function DashboardClientShell({ children }: { children: React.Rea
                 <button
                   onClick={() => {
                     setShowProfileMenu(false);
+                    setProfileError('');
+                    setProfileSuccess('');
+                    setCurrentPassword('');
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setShowProfileModal(true);
+                  }}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg text-zinc-300 hover:bg-[#1C1C1C] hover:text-white transition cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <Key className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>My Profile &amp; Password</span>
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(false);
                     setShowPrinciplesModal(true);
                   }}
                   className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg text-zinc-300 hover:bg-[#1C1C1C] hover:text-white transition cursor-pointer"
@@ -636,6 +701,124 @@ export default function DashboardClientShell({ children }: { children: React.Rea
                 The same design rules across every page: unified 4px/8px spacing grid, Inter/Geist typography scale, and a restrained black enterprise theme.
               </p>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MY PROFILE & PASSWORD MODAL */}
+      {showProfileModal && (
+        <Modal
+          isOpen={showProfileModal}
+          onClose={() => {
+            if (!changingPassword) {
+              setShowProfileModal(false);
+              setProfileError('');
+              setProfileSuccess('');
+            }
+          }}
+          title="My Account Profile & Security"
+          description="View your role credentials and update your account password."
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-xs text-white">
+            {/* User Profile Summary Card */}
+            <div className="p-3.5 rounded-xl bg-[#141414] border border-[#222222] space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-white text-sm">{user.name}</p>
+                  <p className="text-[11px] text-zinc-400 font-mono">{user.email}</p>
+                </div>
+                <Badge variant="amber" size="sm">
+                  {user.role}
+                </Badge>
+              </div>
+              <div className="text-[11px] text-zinc-400 border-t border-[#222222] pt-2 flex items-center justify-between">
+                <span>Branch Store:</span>
+                <span className="text-zinc-200 font-medium">
+                  {user.store?.name || (user.role === 'Admin' ? 'Consolidated All Stores' : 'Unassigned Branch')}
+                </span>
+              </div>
+            </div>
+
+            {/* Notification messages */}
+            {profileSuccess && (
+              <div className="p-3 rounded-lg bg-emerald-950/30 border border-emerald-800/40 text-emerald-400 flex items-center gap-2">
+                <Check className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>{profileSuccess}</span>
+              </div>
+            )}
+
+            {profileError && (
+              <div className="p-3 rounded-lg bg-rose-950/30 border border-rose-800/40 text-rose-400 flex items-center gap-2">
+                <Info className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{profileError}</span>
+              </div>
+            )}
+
+            {/* Change Password Form */}
+            <form onSubmit={handleChangePassword} className="space-y-3 pt-1">
+              <p className="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                Update Account Password
+              </p>
+
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">Current Password *</label>
+                <input
+                  type="password"
+                  required
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter your current password"
+                  className="w-full px-3 py-2 rounded-lg bg-[#181818] border border-[#282828] text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#444444]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">New Password (min 8 chars) *</label>
+                <input
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter a strong new password"
+                  className="w-full px-3 py-2 rounded-lg bg-[#181818] border border-[#282828] text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#444444]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">Confirm New Password *</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your new password"
+                  className="w-full px-3 py-2 rounded-lg bg-[#181818] border border-[#282828] text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#444444]"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-[#222222]">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={changingPassword}
+                  onClick={() => setShowProfileModal(false)}
+                >
+                  Close
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  loading={changingPassword}
+                >
+                  Save New Password
+                </Button>
+              </div>
+            </form>
           </div>
         </Modal>
       )}

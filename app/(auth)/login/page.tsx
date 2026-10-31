@@ -15,9 +15,11 @@ import {
   Store,
   Layers,
   CheckCircle2,
+  Key,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
 
 const ROLES_INFO = [
   {
@@ -58,9 +60,19 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
+
+  // Retrieve & Reset Forgotten Password Modal states
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState('');
 
   const { login } = useAuth();
   const router = useRouter();
@@ -70,13 +82,68 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    const result = await login(email, password);
+    const result = await login(email, password, rememberMe);
     setLoading(false);
 
     if (result.success) {
       router.push('/dashboard');
     } else {
       setError(result.error || 'Invalid credentials. Please verify your email and password.');
+    }
+  };
+
+  const handleRetrieveAndReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotSuccess('');
+
+    if (forgotNewPassword.length < 8) {
+      setForgotError('New password must be at least 8 characters long');
+      return;
+    }
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      setForgotError('Passwords do not match');
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      // Step 1: Request reset token for the corporate email
+      const forgotRes = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim().toLowerCase() }),
+      });
+      const forgotJson = await forgotRes.json();
+      const token = forgotJson.data?.resetToken || forgotJson.data?.demoResetToken;
+
+      if (!forgotJson.success || !token) {
+        setForgotError(forgotJson.error || 'No registered employee account found with this email.');
+        return;
+      }
+
+      // Step 2: Immediately apply the new password with the token
+      const resetRes = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword: forgotNewPassword }),
+      });
+      const resetJson = await resetRes.json();
+
+      if (resetJson.success) {
+        setForgotSuccess('Password updated successfully! Form updated. You can now sign in.');
+        setEmail(forgotEmail.trim().toLowerCase());
+        setPassword(forgotNewPassword);
+        setTimeout(() => {
+          setShowForgotModal(false);
+        }, 1200);
+      } else {
+        setForgotError(resetJson.error || 'Failed to update password.');
+      }
+    } catch {
+      setForgotError('Communication error retrieving password');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -206,12 +273,20 @@ export default function LoginPage() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-medium text-zinc-300">Password</label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-xs text-zinc-400 hover:text-white transition"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotEmail(email || '');
+                      setForgotNewPassword('');
+                      setForgotConfirmPassword('');
+                      setForgotError('');
+                      setForgotSuccess('');
+                      setShowForgotModal(true);
+                    }}
+                    className="text-xs text-zinc-400 hover:text-white transition cursor-pointer"
                   >
                     Forgot password?
-                  </Link>
+                  </button>
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -241,7 +316,8 @@ export default function LoginPage() {
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    defaultChecked
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
                     className="rounded border-[#2A2A2A] bg-[#181818] text-white focus:ring-0 w-3.5 h-3.5 cursor-pointer"
                   />
                   <span>Keep session active</span>
@@ -276,6 +352,108 @@ export default function LoginPage() {
       <div className="w-full max-w-6xl mx-auto py-3 text-center text-xs text-zinc-600">
         <span>StorePulse Enterprise CRM &copy; 2026 &bull; Professional Retail Operations Platform</span>
       </div>
+
+      {/* RETRIEVE / RESET FORGOTTEN PASSWORD MODAL */}
+      {showForgotModal && (
+        <Modal
+          isOpen={showForgotModal}
+          onClose={() => {
+            if (!forgotLoading) {
+              setShowForgotModal(false);
+              setForgotError('');
+              setForgotSuccess('');
+            }
+          }}
+          title="Retrieve & Reset Forgotten Password"
+          description="Enter your registered employee email to set a new password and regain access to your workspace."
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-xs text-white">
+            {forgotSuccess && (
+              <div className="p-3.5 rounded-lg bg-emerald-950/30 border border-emerald-800/40 text-emerald-400 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>{forgotSuccess}</span>
+              </div>
+            )}
+
+            {forgotError && (
+              <div className="p-3.5 rounded-lg bg-rose-950/30 border border-rose-800/40 text-rose-400 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{forgotError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleRetrieveAndReset} className="space-y-3.5">
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">Registered Corporate Email *</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="e.g. rahul@crmsystem.local or admin@crmsystem.local"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#181818] border border-[#282828] text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#444444]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">New Password (min 8 chars) *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="password"
+                    required
+                    value={forgotNewPassword}
+                    onChange={(e) => setForgotNewPassword(e.target.value)}
+                    placeholder="Enter new strong password"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#181818] border border-[#282828] text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#444444]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">Confirm New Password *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="password"
+                    required
+                    value={forgotConfirmPassword}
+                    onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#181818] border border-[#282828] text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#444444]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-[#222222]">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={forgotLoading}
+                  onClick={() => setShowForgotModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  loading={forgotLoading}
+                >
+                  Reset &amp; Sign In
+                </Button>
+              </div>
+            </form>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
