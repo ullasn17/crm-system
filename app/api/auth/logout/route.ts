@@ -1,7 +1,6 @@
-import { NextRequest } from 'next/server';
-import { clearSessionCookie, getSession } from '@/lib/auth/session';
+import { NextRequest, NextResponse } from 'next/server';
+import { getSession } from '@/lib/auth/session';
 import { logAuditEvent } from '@/lib/audit/audit';
-import { successResponse, errorResponse } from '@/lib/utils/api';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,9 +16,26 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    await clearSessionCookie();
-    return successResponse({ message: 'Logged out successfully' });
-  } catch (error) {
-    return errorResponse(error);
+    const res = NextResponse.json({
+      success: true,
+      data: { message: 'Logged out successfully' },
+    });
+
+    // Explicitly wipe the auth cookie on the response
+    res.cookies.set('crm_token', '', {
+      path: '/',
+      maxAge: 0,
+      expires: new Date(0),
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    });
+
+    return res;
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message || 'Logout failed' },
+      { status: 500 }
+    );
   }
 }

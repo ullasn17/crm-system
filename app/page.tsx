@@ -20,7 +20,10 @@ export default async function HomePage() {
     if (!userDoc || !userDoc.isActive) {
       redirect('/login');
     }
-  } catch {
+  } catch (err: any) {
+    if (err?.digest?.startsWith('NEXT_REDIRECT')) {
+      throw err;
+    }
     redirect('/login');
   }
 

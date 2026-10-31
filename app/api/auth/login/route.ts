@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db/mongodb';
 import { User } from '@/models/User';
 import { Role } from '@/models/Role';
@@ -80,7 +80,6 @@ export async function POST(req: NextRequest) {
     };
 
     const token = signToken(sessionUser);
-    await setSessionCookie(token, !!rememberMe);
 
     // Update lastLogin
     user.lastLogin = new Date();
@@ -97,10 +96,26 @@ export async function POST(req: NextRequest) {
       ipAddress,
     });
 
-    return successResponse({
-      user: sessionUser,
-      token,
+    const res = NextResponse.json({
+      success: true,
+      data: {
+        user: sessionUser,
+        token,
+      },
     });
+
+    const cookieOptions: any = {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    };
+    if (rememberMe) {
+      cookieOptions.maxAge = 7 * 24 * 60 * 60; // 7 days
+    }
+    res.cookies.set('crm_token', token, cookieOptions);
+
+    return res;
   } catch (error) {
     return errorResponse(error);
   }
